@@ -1,0 +1,19 @@
+# Default limits and behavior (do not auto-login; posting is manual)
+# Override per-account in config/accounts/
+
+limits:
+  max_actions_per_day: 10
+  max_likes_per_day_first_two_weeks: 5
+  max_session_minutes: 15
+  one_session_per_day: true
+
+warmup:
+  # Delay range between actions (seconds) - reduced for faster warmup
+  delay_between_actions_min: 2
+  delay_between_actions_max: 8
+  scroll_duration_min_sec: 30   # 30 sec - faster
+  scroll_duration_max_sec: 60   # 1 min - faster
+
+health:
+  cooldown_days_min: 3
+  cooldown_days_max: 7

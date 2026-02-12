@@ -1,0 +1,17 @@
+# Example account config. Copy to e.g. account_1.yaml and fill.
+# Login is manual: log in once on the device, then run automation.
+
+account_id: example
+display_name: "My Instagram"
+
+# Device: use adb devices to get serial for emulator or physical device
+device:
+  adb_serial: null   # e.g. emulator-5554 or device serial
+  # Optional: noProxy, or proxy settings if needed later
+  # proxy: null
+
+# Session: we only reuse existing app session (no automated login)
+# App package and activity for Instagram Android
+app:
+  package: com.instagram.android
+  activity: .main.LauncherActivity

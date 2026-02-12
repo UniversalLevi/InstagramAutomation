@@ -1,0 +1,15 @@
+# Default account. Set device.adb_serial after running: adb devices
+# Login is manual: log in to Instagram on this device once, then run: python cli.py start default
+
+account_id: default
+display_name: "Default Instagram"
+
+device:
+  adb_serial: emulator-5554
+
+  
+     # e.g. emulator-5554
+
+app:
+  package: com.instagram.android
+  # activity: optional - if not specified, we'll use activate_app (recommended for noReset=True)
