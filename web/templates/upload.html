@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Media - Instagram Posting Manager{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Upload Media</h2>
+    
+    <form id="upload-form" class="upload-form">
+        <div class="form-group">
+            <label for="media-type">Post Type</label>
+            <select id="media-type" name="type" required>
+                <option value="photo">Photo</option>
+                <option value="video">Video</option>
+                <option value="reel">Reel</option>
+                <option value="carousel">Carousel (Multiple Images)</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="files">Select Files</label>
+            <div class="file-upload-area" id="file-upload-area">
+                <input type="file" id="files" name="files" multiple accept="image/*,video/*" required>
+                <p>Drag & drop files here or click to browse</p>
+                <p class="file-info">Accepted: JPG, PNG, WEBP (images) | MP4, MOV, AVI (videos)</p>
+            </div>
+            <div id="file-preview" class="file-preview"></div>
+        </div>
+        
+        <div class="form-group">
+            <label for="caption">Caption</label>
+            <textarea id="caption" name="caption" rows="4" placeholder="Enter your caption..."></textarea>
+            <span class="char-count"><span id="char-count">0</span> / 2200 characters</span>
+        </div>
+        
+        <div class="form-group">
+            <label for="hashtags">Hashtags (comma-separated)</label>
+            <input type="text" id="hashtags" name="hashtags" placeholder="#tag1, #tag2, #tag3">
+            <small>Separate hashtags with commas</small>
+        </div>
+        
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="schedule-checkbox"> Schedule Post
+            </label>
+            <div id="schedule-fields" style="display: none;">
+                <input type="datetime-local" id="scheduled-time" name="scheduled_time">
+            </div>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Add to Queue</button>
+            <button type="button" class="btn btn-secondary" onclick="window.location.href='{{ url_for('index') }}'">Cancel</button>
+        </div>
+        
+        <div id="upload-status" class="upload-status"></div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const fileInput = document.getElementById('files');
+    const filePreview = document.getElementById('file-preview');
+    const captionInput = document.getElementById('caption');
+    const charCount = document.getElementById('char-count');
+    const scheduleCheckbox = document.getElementById('schedule-checkbox');
+    const scheduleFields = document.getElementById('schedule-fields');
+    const uploadForm = document.getElementById('upload-form');
+    const uploadStatus = document.getElementById('upload-status');
+    
+    // Character count
+    captionInput.addEventListener('input', () => {
+        charCount.textContent = captionInput.value.length;
+    });
+    
+    // Schedule toggle
+    scheduleCheckbox.addEventListener('change', () => {
+        scheduleFields.style.display = scheduleCheckbox.checked ? 'block' : 'none';
+    });
+    
+    // Allowed extensions (must match backend)
+    const VIDEO_EXT = ['.mp4', '.mov', '.avi'];
+    const IMAGE_EXT = ['.jpg', '.jpeg', '.png', '.webp'];
+    function ext(name) { return (name || '').toLowerCase().replace(/.*\./, '.'); }
+    function isVideo(file) { return VIDEO_EXT.includes(ext(file.name)) || (file.type && file.type.startsWith('video/')); }
+    function isImage(file) { return IMAGE_EXT.includes(ext(file.name)) || (file.type && file.type.startsWith('image/')); }
+
+    // File preview + auto-set Post Type from selected files
+    fileInput.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files);
+        filePreview.innerHTML = '';
+        const mediaTypeSelect = document.getElementById('media-type');
+
+        if (files.length > 0) {
+            const first = files[0];
+            const allVideo = files.every(isVideo);
+            const allImage = files.every(isImage);
+            if (allVideo) {
+                mediaTypeSelect.value = 'video';
+            } else if (allImage) {
+                mediaTypeSelect.value = files.length > 1 ? 'carousel' : 'photo';
+            }
+            // If mixed, leave current selection (user must pick)
+        }
+
+        files.forEach(file => {
+            const div = document.createElement('div');
+            div.className = 'preview-item';
+
+            if (file.type.startsWith('image/')) {
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(file);
+                img.style.maxWidth = '200px';
+                div.appendChild(img);
+            } else if (file.type.startsWith('video/')) {
+                const video = document.createElement('video');
+                video.src = URL.createObjectURL(file);
+                video.controls = true;
+                video.style.maxWidth = '200px';
+                div.appendChild(video);
+            }
+
+            div.innerHTML += `<p>${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)</p>`;
+            filePreview.appendChild(div);
+        });
+    });
+    
+    // Drag & drop
+    const uploadArea = document.getElementById('file-upload-area');
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+    });
+    uploadArea.addEventListener('dragleave', () => {
+        uploadArea.classList.remove('dragover');
+    });
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        fileInput.files = e.dataTransfer.files;
+        fileInput.dispatchEvent(new Event('change'));
+    });
+    
+    // Click area to open file selector (input is display:none)
+    uploadArea.addEventListener('click', (e) => {
+        if (e.target === fileInput) return;
+        e.preventDefault();
+        fileInput.click();
+    });
+    
+    // Form submission
+    uploadForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const formData = new FormData();
+        const files = fileInput.files;
+        const mediaType = document.getElementById('media-type').value;
+        
+        if (files.length === 0) {
+            uploadStatus.innerHTML = '<p class="error">Please select at least one file</p>';
+            return;
+        }
+        
+        // Validate carousel
+        if (mediaType === 'carousel' && files.length < 2) {
+            uploadStatus.innerHTML = '<p class="error">Carousel requires at least 2 images</p>';
+            return;
+        }
+        
+        for (let file of files) {
+            formData.append('files', file);
+        }
+        formData.append('type', mediaType);
+        formData.append('caption', captionInput.value);
+        formData.append('hashtags', document.getElementById('hashtags').value);
+        
+        if (scheduleCheckbox.checked) {
+            const scheduledTime = document.getElementById('scheduled-time').value;
+            if (scheduledTime) {
+                formData.append('scheduled_time', new Date(scheduledTime).toISOString());
+            }
+        }
+        
+        uploadStatus.innerHTML = '<p class="info">Uploading...</p>';
+        
+        try {
+            const response = await fetch('/api/upload', {
+                method: 'POST',
+                body: formData,
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok) {
+                uploadStatus.innerHTML = '<p class="success">Media added to queue successfully!</p>';
+                setTimeout(() => {
+                    window.location.href = '/queue';
+                }, 1500);
+            } else {
+                uploadStatus.innerHTML = `<p class="error">Error: ${result.error}</p>`;
+            }
+        } catch (error) {
+            uploadStatus.innerHTML = `<p class="error">Upload failed: ${error.message}</p>`;
+        }
+    });
+</script>
+{% endblock %}

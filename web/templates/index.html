@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Instagram Posting Manager{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Dashboard</h2>
+    
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h3>Total Posts</h3>
+            <p class="stat-number" id="stat-total">-</p>
+        </div>
+        <div class="stat-card">
+            <h3>Pending</h3>
+            <p class="stat-number" id="stat-pending">-</p>
+        </div>
+        <div class="stat-card">
+            <h3>Scheduled</h3>
+            <p class="stat-number" id="stat-scheduled">-</p>
+        </div>
+        <div class="stat-card">
+            <h3>Posted</h3>
+            <p class="stat-number" id="stat-posted">-</p>
+        </div>
+        <div class="stat-card">
+            <h3>Failed</h3>
+            <p class="stat-number" id="stat-failed">-</p>
+        </div>
+    </div>
+    
+    <div class="actions-section">
+        <a href="{{ url_for('upload_page') }}" class="btn btn-primary">Upload New Media</a>
+        <a href="{{ url_for('queue_page') }}" class="btn btn-secondary">View Queue</a>
+    </div>
+    
+    <div class="recent-posts">
+        <h3>Recent Posts</h3>
+        <div id="recent-posts-list">
+            <p>Loading...</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    async function loadStats() {
+        try {
+            const response = await fetch('/api/stats');
+            const stats = await response.json();
+            
+            document.getElementById('stat-total').textContent = stats.total || 0;
+            document.getElementById('stat-pending').textContent = stats.pending || 0;
+            document.getElementById('stat-scheduled').textContent = stats.scheduled || 0;
+            document.getElementById('stat-posted').textContent = stats.posted || 0;
+            document.getElementById('stat-failed').textContent = stats.failed || 0;
+        } catch (error) {
+            console.error('Failed to load stats:', error);
+        }
+    }
+    
+    async function loadRecentPosts() {
+        try {
+            const response = await fetch('/api/queue?status=pending&status=scheduled');
+            const posts = await response.json();
+            const recent = posts.slice(0, 5);
+            
+            const listEl = document.getElementById('recent-posts-list');
+            if (recent.length === 0) {
+                listEl.innerHTML = '<p>No posts in queue</p>';
+                return;
+            }
+            
+            listEl.innerHTML = recent.map(post => `
+                <div class="post-item">
+                    <span class="post-type">${post.media_type}</span>
+                    <span class="post-status status-${post.status}">${post.status}</span>
+                    <span class="post-caption">${post.caption || '(no caption)'}</span>
+                </div>
+            `).join('');
+        } catch (error) {
+            console.error('Failed to load recent posts:', error);
+        }
+    }
+    
+    loadStats();
+    loadRecentPosts();
+    setInterval(loadStats, 30000); // Refresh every 30 seconds
+</script>
+{% endblock %}

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
@@ -57,19 +57,28 @@ def run_plan(
         dmin, dmax = delay_range[0], delay_range[1]
     scroll_min = warmup_cfg.get("scroll_duration_min_sec", 120)
     scroll_max = warmup_cfg.get("scroll_duration_max_sec", 240)
+    # Exit early probability (0.0 to disable, default 0.05 = 5%)
+    # Disabled in force mode (testing)
+    exit_early_prob = warmup_cfg.get("exit_early_probability", 0.05)
+    if config.get("force_mode", False):
+        exit_early_prob = 0.0  # Disable random exit in force mode
 
-    session_started_at = session_started_at or datetime.utcnow()
+    session_started_at = session_started_at or datetime.now(timezone.utc)
     total_actions = 0
     likes_count = 0
     stopped_early = False
     max_session_sec = plan.max_session_minutes * 60
 
-    # Shuffle action order (no fixed sequence)
-    items = shuffle_actions(plan.items)
+    # Shuffle action order (no fixed sequence), but keep GO_TO_OWN_PROFILE at the end
+    from src.orchestrator.planner import ActionType
+    items = list(plan.items)
+    own_profile_items = [item for item in items if item.action == ActionType.GO_TO_OWN_PROFILE]
+    other_items = [item for item in items if item.action != ActionType.GO_TO_OWN_PROFILE]
+    items = shuffle_actions(other_items) + own_profile_items  # Shuffle others, then own profile at end
     logger.info("Plan has %s actions: %s", len(items), [item.action.value for item in items])
 
     def elapsed() -> float:
-        return (datetime.utcnow() - session_started_at).total_seconds()
+        return (datetime.now(timezone.utc) - session_started_at).total_seconds()
 
     def should_stop() -> bool:
         if stop_flag and stop_flag():
@@ -88,7 +97,7 @@ def run_plan(
         if should_stop():
             stopped_early = True
             break
-        if maybe_exit_early(0.05):
+        if exit_early_prob > 0 and maybe_exit_early(exit_early_prob):
             logger.info("Exit early (random)")
             stopped_early = True
             break
@@ -147,9 +156,9 @@ def run_plan(
                 delay()
                 continue
             logger.info("Executing LIKE_REEL (%s/%s)", likes_count + 1, plan.max_likes)
-            # Make sure we're in Reels
+            # Ensure we're in Reels feed (not Profile): go to Reels and wait for feed to load
             if app.go_to_reels_tab():
-                time.sleep(0.5)
+                time.sleep(2.5)  # Let Reels feed fully load (especially when coming from Profile)
                 if app.like_reel():
                     likes_count += 1
                     total_actions += 1
@@ -168,7 +177,13 @@ def run_plan(
                 delay()
                 continue
             logger.info("Executing VISIT_PROFILE")
-            if app.go_to_home_tab():
+            on_home = app.go_to_home_tab()
+            if not on_home:
+                # Fallback: may be on profile or other screen; Back to feed then retry
+                app.tap_back()
+                time.sleep(1.0)
+                on_home = app.go_to_home_tab()
+            if on_home:
                 time.sleep(0.5)  # Reduced wait
                 if app.open_profile_from_feed():
                     total_actions += 1
@@ -191,7 +206,12 @@ def run_plan(
                 delay()
                 continue
             logger.info("Executing LIKE_POST (%s/%s)", likes_count + 1, plan.max_likes)
-            if app.go_to_home_tab():
+            on_home = app.go_to_home_tab()
+            if not on_home:
+                app.tap_back()
+                time.sleep(1.0)
+                on_home = app.go_to_home_tab()
+            if on_home:
                 time.sleep(0.5)  # Reduced wait
                 if app.like_current_post():
                     likes_count += 1
@@ -249,7 +269,7 @@ def run_plan(
         else:
             delay()
 
-    session_ended_at = datetime.utcnow().isoformat() + "Z"
+    session_ended_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     session_started_str = session_started_at.isoformat() + "Z"
     repo.upsert_daily_totals(
         account_id,

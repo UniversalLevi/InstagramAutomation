@@ -111,43 +111,43 @@ def build_plan(
     # How many actions we can still do
     remaining_actions = max(0, max_actions_per_day - total_actions_today)
 
+    # Get config values for action counts
+    warmup_cfg = config.get("warmup", {})
+    reel_scroll_count = warmup_cfg.get("reel_scroll_count", 3)
+    reel_like_count = warmup_cfg.get("reel_like_count", 4)
+    visit_profile_count = warmup_cfg.get("visit_profile_count", 2)
+    post_like_count = warmup_cfg.get("post_like_count", 2)
+
     items: List[ActionPlanItem] = []
 
     # Go to Reels and scroll through videos first
-    items.append(ActionPlanItem(ActionType.SCROLL_REELS, {"num_videos": 3}))  # Initial scroll
+    items.append(ActionPlanItem(ActionType.SCROLL_REELS, {"num_videos": reel_scroll_count}))
     
-    # Randomly like 3-4 Reels (scattered throughout scrolling)
-    # Target 3-4 Reel likes, but adjust if max_likes is lower
-    if max_likes >= 4:
-        num_reel_likes = 4
-    elif max_likes >= 3:
-        num_reel_likes = 3
-    else:
-        num_reel_likes = max_likes  # Use whatever we have
+    # Like Reels (use config value, but cap by max_likes)
+    num_reel_likes = min(reel_like_count, max_likes)
     for i in range(num_reel_likes):
         items.append(ActionPlanItem(ActionType.LIKE_REEL, {}))
         # After each like (except last), scroll to next video
         if i < num_reel_likes - 1:
-            items.append(ActionPlanItem(ActionType.SCROLL_REELS, {"num_videos": 2}))  # Scroll 2 videos between likes
+            items.append(ActionPlanItem(ActionType.SCROLL_REELS, {"num_videos": reel_scroll_count}))
 
-    # Visit profiles (reduced since we're focusing on Reels)
-    num_profiles = min(band.profiles_max - 1, remaining_actions - len(items) - 2)
-    num_profiles = max(0, num_profiles)  # Can be 0 if we're focusing on Reels
+    # Visit profiles (use config value, but cap by band and remaining actions)
+    num_profiles = min(visit_profile_count, band.profiles_max, max(0, remaining_actions - len(items) - 2))
     for _ in range(num_profiles):
         items.append(ActionPlanItem(ActionType.VISIT_PROFILE, {}))
         items.append(ActionPlanItem(ActionType.RETURN_HOME, {}))
 
-    # Regular post likes (very limited, reduced since we have Reel likes)
-    remaining_post_likes = max(0, max_likes - num_reel_likes)
+    # Regular post likes (use config value, but cap by remaining likes)
+    remaining_post_likes = min(post_like_count, max(0, max_likes - num_reel_likes))
     for _ in range(remaining_post_likes):
         items.append(ActionPlanItem(ActionType.LIKE_POST, {}))
 
-    # Go to own profile
-    items.append(ActionPlanItem(ActionType.GO_TO_OWN_PROFILE, {}))
-
-    # One bio edit only in day 8-14, once ever
+    # One bio edit only in day 8-14, once ever (before going to own profile)
     if band.bio_edit_allowed and not bio_edit_done:
         items.append(ActionPlanItem(ActionType.BIO_EDIT, {}))
+
+    # Go to own profile (always last)
+    items.append(ActionPlanItem(ActionType.GO_TO_OWN_PROFILE, {}))
 
     # Cap total items by remaining actions and rough session length
     items = items[: max_session_minutes * 2]

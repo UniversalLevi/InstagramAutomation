@@ -1,0 +1,24 @@
+{
+  "photo": [
+    "{caption}",
+    "\u2728 {caption}",
+    "\ud83d\udcf8 {caption}",
+    "{caption} \u2728"
+  ],
+  "video": [
+    "{caption}",
+    "\ud83c\udfa5 {caption}",
+    "\ud83d\udcf9 {caption}"
+  ],
+  "reel": [
+    "{caption}",
+    "\ud83c\udfac {caption}",
+    "\u2728 {caption}",
+    "{caption} \ud83d\udcaf"
+  ],
+  "carousel": [
+    "{caption}",
+    "\ud83d\udcf8 {caption}",
+    "\u2728 {caption}"
+  ]
+}

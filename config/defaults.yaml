@@ -13,6 +13,15 @@ warmup:
   delay_between_actions_max: 8
   scroll_duration_min_sec: 30   # 30 sec - faster
   scroll_duration_max_sec: 60   # 1 min - faster
+  
+  # Action counts (override defaults)
+  reel_scroll_count: 3          # Number of videos to scroll in Reels (per scroll action)
+  reel_like_count: 4            # Number of Reels to like
+  visit_profile_count: 2        # Number of profiles to visit
+  post_like_count: 2            # Number of regular posts to like
+  
+  # Randomization (human-like behavior)
+  exit_early_probability: 0.05  # Probability to exit early (0.0 to disable, 0.05 = 5% chance)
 
 health:
   cooldown_days_min: 3

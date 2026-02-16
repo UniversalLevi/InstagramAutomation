@@ -10,5 +10,10 @@ Appium-Python-Client>=3.0.0
 # Config (YAML)
 PyYAML>=6.0
 
+# Web interface
+Flask>=2.3.0
+Werkzeug>=2.3.0
+python-dateutil>=2.8.0
+
 # State and config
 # (sqlite3 is stdlib; no extra deps for JSON)

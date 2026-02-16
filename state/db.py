@@ -93,10 +93,29 @@ def _init_schema_impl(conn: sqlite3.Connection) -> None:
             FOREIGN KEY (account_id) REFERENCES account(account_id)
         );
 
+        CREATE TABLE IF NOT EXISTS post_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id TEXT NOT NULL,
+            media_type TEXT NOT NULL,
+            file_paths TEXT NOT NULL,
+            caption TEXT,
+            hashtags TEXT,
+            scheduled_time TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TEXT NOT NULL,
+            posted_at TEXT,
+            error_message TEXT,
+            FOREIGN KEY (account_id) REFERENCES account(account_id)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_action_history_account_date
             ON action_history(account_id, run_date);
         CREATE INDEX IF NOT EXISTS idx_daily_totals_account
             ON daily_totals(account_id);
+        CREATE INDEX IF NOT EXISTS idx_post_queue_account_status
+            ON post_queue(account_id, status);
+        CREATE INDEX IF NOT EXISTS idx_post_queue_scheduled_time
+            ON post_queue(scheduled_time) WHERE scheduled_time IS NOT NULL;
     """)
 
 

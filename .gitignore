@@ -3,6 +3,14 @@ data/*.db
 data/current_account.txt
 *.log
 
+# Media files (keep directory structure)
+media/queue/**/*
+media/posted/**/*
+media/failed/**/*
+!media/queue/.gitkeep
+!media/posted/.gitkeep
+!media/failed/.gitkeep
+
 # Python
 __pycache__/
 *.py[cod]

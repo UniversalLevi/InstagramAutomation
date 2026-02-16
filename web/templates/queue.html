@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+
+{% block title %}Queue Management - Instagram Posting Manager{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Post Queue</h2>
+    
+    <div class="queue-filters">
+        <select id="filter-status">
+            <option value="">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="posted">Posted</option>
+            <option value="failed">Failed</option>
+        </select>
+        <select id="filter-type">
+            <option value="">All Types</option>
+            <option value="photo">Photo</option>
+            <option value="video">Video</option>
+            <option value="reel">Reel</option>
+            <option value="carousel">Carousel</option>
+        </select>
+        <button class="btn btn-secondary" onclick="loadQueue()">Refresh</button>
+    </div>
+    
+    <div id="queue-list" class="queue-list">
+        <p>Loading...</p>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div id="edit-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <span class="close" onclick="closeEditModal()">&times;</span>
+        <h3>Edit Post</h3>
+        <form id="edit-form">
+            <input type="hidden" id="edit-id">
+            <div class="form-group">
+                <label for="edit-caption">Caption</label>
+                <textarea id="edit-caption" rows="4"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="edit-hashtags">Hashtags</label>
+                <input type="text" id="edit-hashtags" placeholder="#tag1, #tag2">
+            </div>
+            <div class="form-group">
+                <label for="edit-scheduled-time">Scheduled Time</label>
+                <input type="datetime-local" id="edit-scheduled-time">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Save</button>
+                <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let currentPosts = [];
+    
+    async function loadQueue() {
+        const status = document.getElementById('filter-status').value;
+        const type = document.getElementById('filter-type').value;
+        
+        let url = '/api/queue?';
+        if (status) url += `status=${status}&`;
+        if (type) url += `type=${type}&`;
+        
+        try {
+            const response = await fetch(url);
+            currentPosts = await response.json();
+            renderQueue();
+        } catch (error) {
+            document.getElementById('queue-list').innerHTML = `<p class="error">Failed to load queue: ${error.message}</p>`;
+        }
+    }
+    
+    function renderQueue() {
+        const listEl = document.getElementById('queue-list');
+        
+        if (currentPosts.length === 0) {
+            listEl.innerHTML = '<p>No posts in queue</p>';
+            return;
+        }
+        
+        listEl.innerHTML = currentPosts.map(post => {
+            const scheduledTime = post.scheduled_time ? new Date(post.scheduled_time).toLocaleString() : 'Immediate';
+            const fileCount = post.file_paths.length;
+            
+            return `
+                <div class="queue-item status-${post.status}">
+                    <div class="queue-item-header">
+                        <span class="queue-type">${post.media_type.toUpperCase()}</span>
+                        <span class="queue-status status-${post.status}">${post.status}</span>
+                    </div>
+                    <div class="queue-item-body">
+                        <p><strong>Files:</strong> ${fileCount} file(s)</p>
+                        <p><strong>Caption:</strong> ${post.caption || '(no caption)'}</p>
+                        <p><strong>Hashtags:</strong> ${post.hashtags.join(', ') || 'none'}</p>
+                        <p><strong>Scheduled:</strong> ${scheduledTime}</p>
+                        ${post.error_message ? `<p class="error"><strong>Error:</strong> ${post.error_message}</p>` : ''}
+                    </div>
+                    <div class="queue-item-actions">
+                        ${post.status === 'pending' || post.status === 'scheduled' ? `
+                            <button class="btn btn-small btn-primary" onclick="postNow(${post.id})">Post Now</button>
+                            <button class="btn btn-small btn-secondary" onclick="editPost(${post.id})">Edit</button>
+                            <button class="btn btn-small btn-danger" onclick="deletePost(${post.id})">Remove</button>
+                        ` : ''}
+                        ${post.status === 'failed' ? `
+                            <button class="btn btn-small btn-primary" onclick="retryPost(${post.id})">Retry</button>
+                            <button class="btn btn-small btn-danger" onclick="deletePost(${post.id})">Remove</button>
+                        ` : ''}
+                        ${post.status === 'posted' ? `
+                            <button class="btn btn-small btn-danger" onclick="deletePost(${post.id})">Remove</button>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+    
+    async function postNow(postId) {
+        try {
+            const response = await fetch(`/api/post/${postId}`, { method: 'POST' });
+            const result = await response.json();
+            
+            if (response.ok) {
+                if (typeof showNotification === 'function') showNotification('Posting started.', 'success');
+                loadQueue();
+            } else {
+                if (typeof showNotification === 'function') showNotification(result.error || 'Error', 'error');
+            }
+        } catch (error) {
+            if (typeof showNotification === 'function') showNotification(error.message || 'Failed', 'error');
+        }
+    }
+    
+    async function editPost(postId) {
+        const post = currentPosts.find(p => p.id === postId);
+        if (!post) return;
+        
+        document.getElementById('edit-id').value = postId;
+        document.getElementById('edit-caption').value = post.caption || '';
+        document.getElementById('edit-hashtags').value = post.hashtags.join(', ');
+        if (post.scheduled_time) {
+            const dt = new Date(post.scheduled_time);
+            const localDateTime = dt.toISOString().slice(0, 16);
+            document.getElementById('edit-scheduled-time').value = localDateTime;
+        } else {
+            document.getElementById('edit-scheduled-time').value = '';
+        }
+        
+        document.getElementById('edit-modal').style.display = 'block';
+    }
+    
+    function closeEditModal() {
+        document.getElementById('edit-modal').style.display = 'none';
+    }
+    
+    async function retryPost(postId) {
+        try {
+            const response = await fetch(`/api/queue/${postId}/retry`, { method: 'POST' });
+            const result = await response.json();
+            if (response.ok) {
+                if (typeof showNotification === 'function') showNotification('Post reset to pending. You can post now.', 'success');
+                loadQueue();
+            } else {
+                if (typeof showNotification === 'function') showNotification(result.error || 'Error', 'error');
+            }
+        } catch (error) {
+            if (typeof showNotification === 'function') showNotification(error.message || 'Failed', 'error');
+        }
+    }
+    
+    async function deletePost(postId) {
+        try {
+            const response = await fetch(`/api/queue/${postId}`, { method: 'DELETE' });
+            const result = await response.json();
+            
+            if (response.ok) {
+                if (typeof showNotification === 'function') showNotification('Post removed from queue.', 'success');
+                loadQueue();
+            } else {
+                if (typeof showNotification === 'function') showNotification(result.error || 'Error', 'error');
+            }
+        } catch (error) {
+            if (typeof showNotification === 'function') showNotification(error.message || 'Failed', 'error');
+        }
+    }
+    
+    document.getElementById('edit-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const postId = parseInt(document.getElementById('edit-id').value);
+        const caption = document.getElementById('edit-caption').value;
+        const hashtags = document.getElementById('edit-hashtags').value.split(',').map(h => h.trim()).filter(h => h);
+        const scheduledTime = document.getElementById('edit-scheduled-time').value;
+        
+        const data = {
+            caption,
+            hashtags,
+            scheduled_time: scheduledTime ? new Date(scheduledTime).toISOString() : null,
+        };
+        
+        try {
+            const response = await fetch(`/api/queue/${postId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok) {
+                closeEditModal();
+                loadQueue();
+                if (typeof showNotification === 'function') showNotification('Post updated.', 'success');
+            } else {
+                if (typeof showNotification === 'function') showNotification(result.error || 'Error', 'error');
+            }
+        } catch (error) {
+            if (typeof showNotification === 'function') showNotification(error.message || 'Failed', 'error');
+        }
+    });
+    
+    document.getElementById('filter-status').addEventListener('change', loadQueue);
+    document.getElementById('filter-type').addEventListener('change', loadQueue);
+    
+    loadQueue();
+    setInterval(loadQueue, 30000); // Refresh every 30 seconds
+</script>
+{% endblock %}

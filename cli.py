@@ -158,12 +158,17 @@ def _cmd_start(account_id: str, force: bool = False) -> int:
 
     # Record last run date and session start
     repo.set_last_run_date(account_id, today)
-    session_started = __import__("datetime").datetime.utcnow()
+    from datetime import timezone
+    session_started = __import__("datetime").datetime.now(timezone.utc)
 
     def on_action_done(action_type: str, count: int):
         repo.record_action(account_id, today, action_type, count)
 
     from src.warmup.runner import run_plan
+
+    # Pass force mode to runner (disables random early exit)
+    config_with_force = dict(config)
+    config_with_force["force_mode"] = force
 
     def run():
         result = run_plan(
@@ -174,7 +179,7 @@ def _cmd_start(account_id: str, force: bool = False) -> int:
             on_action_done=on_action_done,
             session_started_at=session_started,
             stop_flag=lambda: _stop_requested,
-            config=config,
+            config=config_with_force,
         )
         logger.info("Session finished: %s", result)
 
@@ -222,6 +227,7 @@ def _print_menu():
     print("  5. 🔧 Customize Warm-Up Behavior")
     print("  6. 📝 Account Management")
     print("  7. 🛑 Stop Current Session")
+    print("  8. 🌐 Launch Web Interface (Posting Manager)")
     print("  0. ❌ Exit")
     print("="*60)
     print(f"Current Account: {_get_current_account()}")
@@ -460,6 +466,30 @@ def _menu_customize():
     return 0
 
 
+def _menu_web_interface():
+    """Option 8: Launch web interface."""
+    print("\n🌐 Launch Web Interface")
+    print("-" * 60)
+    print("Starting web interface on http://localhost:5000")
+    print("Press Ctrl+C to stop the server")
+    print("\nFeatures:")
+    print("  • Upload media (photos, videos, reels, carousels)")
+    print("  • Add captions and hashtags")
+    print("  • Schedule posts")
+    print("  • Manage posting queue")
+    print("  • View statistics")
+    
+    try:
+        from web.app import app
+        app.run(host="127.0.0.1", port=5000, debug=False)
+    except KeyboardInterrupt:
+        print("\n\nWeb interface stopped.")
+    except Exception as e:
+        logger.error("Failed to start web interface: %s", e)
+        print(f"\n❌ Error: {e}")
+        print("Make sure Flask is installed: pip install Flask")
+
+
 def _menu_account_management():
     """Option 6: Account Management."""
     print("\n📝 Account Management")
@@ -543,11 +573,16 @@ def main():
                 _menu_account_management()
             elif choice == '7':
                 _cmd_stop()
+            elif choice == '8':
+                _menu_web_interface()
             else:
                 print("❌ Invalid option. Please try again.")
             
             if choice != '0':
-                input("\nPress Enter to return to menu...")
+                try:
+                    input("\nPress Enter to return to menu...")
+                except (EOFError, KeyboardInterrupt):
+                    break
     
     else:
         # Original argparse functionality for command-line usage

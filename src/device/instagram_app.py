@@ -10,7 +10,12 @@ from typing import List, Optional, Tuple
 
 from appium.webdriver import WebElement
 from appium.webdriver.common.appiumby import AppiumBy
-from selenium.common.exceptions import NoSuchElementException, WebDriverException
+from selenium.common.exceptions import (
+    ElementClickInterceptedException,
+    NoSuchElementException,
+    StaleElementReferenceException,
+    WebDriverException,
+)
 from selenium.webdriver.remote.webdriver import WebDriver
 
 from . import selectors as sel
@@ -51,6 +56,31 @@ def _find_element(driver: WebDriver, selectors: List[Tuple[str, str]], timeout: 
 
 def _tap_element(driver: WebDriver, element: WebElement) -> None:
     element.click()
+
+
+def _tap_element_robust(driver: WebDriver, element: WebElement) -> bool:
+    """
+    Tap element: try click first; on stale or intercepted, retry once; fallback to tap at element center.
+    Returns True if tap was performed.
+    """
+    try:
+        element.click()
+        return True
+    except (StaleElementReferenceException, ElementClickInterceptedException):
+        pass
+    except Exception:
+        pass
+    try:
+        loc = element.location
+        sz = element.size
+        if loc and sz:
+            x = loc.get("x", 0) + sz.get("width", 0) // 2
+            y = loc.get("y", 0) + sz.get("height", 0) // 2
+            driver.tap([(x, y)], 100)
+            return True
+    except Exception:
+        pass
+    return False
 
 
 def _scroll_up(driver: WebDriver, duration_ms: int = 300) -> None:
@@ -119,11 +149,11 @@ class InstagramApp:
         return False
 
     def go_to_reels_tab(self) -> bool:
-        """Navigate to Reels tab."""
+        """Navigate to Reels tab (feed section)."""
         el = _find_element(self.driver, sel.reels_tab_selectors(), timeout=2.0)
         if el:
             _tap_element(self.driver, el)
-            time.sleep(1.0)  # Wait for Reels to load
+            time.sleep(1.5)  # Wait for Reels feed to load (not Profile)
             return True
         return False
 
@@ -226,40 +256,45 @@ class InstagramApp:
 
     def like_reel(self) -> bool:
         """
-        Like the current Reel video. Tries double-tap first, then like button.
+        Like the current Reel video (Reels feed only). Tries double-tap first, then like button.
+        Caller must ensure we're on Reels tab (e.g. go_to_reels_tab() + wait) before calling.
         Returns True if like was performed.
         """
         # Avoid double-like: if already liked, skip
         if _find_element(self.driver, sel.like_button_liked_selectors(), timeout=0.5):
             return False
-        
-        # Try double-tap on video (common Reels gesture)
+
+        # 1) Double-tap on video area (Reels-specific; center = current reel)
         try:
             size = self.driver.get_window_size()
             x = size["width"] // 2
-            y = int(size["height"] * 0.5)  # Tap center of screen (video area)
-            self.driver.tap([(x, y)], 100)  # First tap
+            y = int(size["height"] * 0.5)
+            self.driver.tap([(x, y)], 100)
             time.sleep(0.2)
-            self.driver.tap([(x, y)], 100)  # Second tap (double-tap)
+            self.driver.tap([(x, y)], 100)
             time.sleep(0.8)
-            # Check if it worked
             if _find_element(self.driver, sel.like_button_liked_selectors(), timeout=0.5):
                 logger.info("Reel liked via double-tap")
                 return True
         except Exception as e:
             logger.warning("Double-tap failed: %s", e)
-        
-        # Fallback: try like button
-        el = _find_element(self.driver, sel.like_button_selectors(), timeout=2.0)
-        if el:
+
+        # 2) Fallback: like button (re-find on each attempt to avoid stale element)
+        for attempt in range(2):
+            el = _find_element(self.driver, sel.like_button_selectors(), timeout=2.0)
+            if not el:
+                break
             try:
                 _tap_element(self.driver, el)
                 time.sleep(0.8)
                 logger.info("Reel liked via like button")
                 return True
+            except StaleElementReferenceException:
+                logger.debug("Like button stale, retry with fresh find")
+                time.sleep(0.5)
             except Exception as e:
                 logger.warning("Like button tap failed: %s", e)
-        
+                break
         return False
 
     def has_block_warning(self) -> bool:
