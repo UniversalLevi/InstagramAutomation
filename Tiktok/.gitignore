@@ -1,0 +1,29 @@
+# State and runtime
+data/*.db
+data/current_account.txt
+*.log
+
+# Media files (keep directory structure)
+media/queue/**/*
+media/posted/**/*
+media/failed/**/*
+!media/queue/videos/.gitkeep
+!media/posted/.gitkeep
+!media/failed/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Debug screenshots/dumps
+post_*.png
+post_*.txt

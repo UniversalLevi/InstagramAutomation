@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Video - TikTok Posting Manager{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Upload Video</h2>
+
+    <form id="upload-form" class="upload-form">
+        <div class="form-group">
+            <label for="media-type">Post Type</label>
+            <select id="media-type" name="type" required>
+                <option value="video">Video</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="files">Select Video</label>
+            <div class="file-upload-area" id="file-upload-area">
+                <input type="file" id="files" name="files" accept="video/*" required>
+                <p>Drag & drop a video here or click to browse</p>
+                <p class="file-info">Accepted: MP4, MOV, AVI</p>
+            </div>
+            <div id="file-preview" class="file-preview"></div>
+        </div>
+
+        <div class="form-group">
+            <label for="caption">Caption</label>
+            <textarea id="caption" name="caption" rows="4" placeholder="Enter your caption..."></textarea>
+            <span class="char-count"><span id="char-count">0</span> characters</span>
+        </div>
+
+        <div class="form-group">
+            <label for="hashtags">Hashtags (comma-separated)</label>
+            <input type="text" id="hashtags" name="hashtags" placeholder="#fyp, #viral, #foryou">
+        </div>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="schedule-checkbox"> Schedule Post
+            </label>
+            <div id="schedule-fields" style="display: none;">
+                <input type="datetime-local" id="scheduled-time" name="scheduled_time">
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Add to Queue</button>
+            <button type="button" class="btn btn-secondary" onclick="window.location.href='{{ url_for('index') }}'">Cancel</button>
+        </div>
+
+        <div id="upload-status" class="upload-status"></div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const fileInput = document.getElementById('files');
+    const filePreview = document.getElementById('file-preview');
+    const captionInput = document.getElementById('caption');
+    const charCount = document.getElementById('char-count');
+    const scheduleCheckbox = document.getElementById('schedule-checkbox');
+    const scheduleFields = document.getElementById('schedule-fields');
+    const uploadForm = document.getElementById('upload-form');
+    const uploadStatus = document.getElementById('upload-status');
+
+    captionInput.addEventListener('input', () => { charCount.textContent = captionInput.value.length; });
+    scheduleCheckbox.addEventListener('change', () => {
+        scheduleFields.style.display = scheduleCheckbox.checked ? 'block' : 'none';
+    });
+
+    fileInput.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files);
+        filePreview.innerHTML = '';
+        files.forEach(file => {
+            const div = document.createElement('div');
+            div.className = 'preview-item';
+            if (file.type.startsWith('video/')) {
+                const video = document.createElement('video');
+                video.src = URL.createObjectURL(file);
+                video.controls = true;
+                video.style.maxWidth = '200px';
+                div.appendChild(video);
+            }
+            div.innerHTML += '<p>' + file.name + ' (' + (file.size / 1024 / 1024).toFixed(2) + ' MB)</p>';
+            filePreview.appendChild(div);
+        });
+    });
+
+    const uploadArea = document.getElementById('file-upload-area');
+    uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+    uploadArea.addEventListener('dragleave', () => { uploadArea.classList.remove('dragover'); });
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        fileInput.files = e.dataTransfer.files;
+        fileInput.dispatchEvent(new Event('change'));
+    });
+    uploadArea.addEventListener('click', (e) => {
+        if (e.target === fileInput) return;
+        e.preventDefault();
+        fileInput.click();
+    });
+
+    uploadForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData();
+        const files = fileInput.files;
+        if (files.length === 0) {
+            uploadStatus.innerHTML = '<p class="error">Please select a video</p>';
+            return;
+        }
+        for (let file of files) formData.append('files', file);
+        formData.append('type', 'video');
+        formData.append('caption', captionInput.value);
+        formData.append('hashtags', document.getElementById('hashtags').value);
+        if (scheduleCheckbox.checked) {
+            const scheduledTime = document.getElementById('scheduled-time').value;
+            if (scheduledTime) formData.append('scheduled_time', new Date(scheduledTime).toISOString());
+        }
+        uploadStatus.innerHTML = '<p class="info">Uploading...</p>';
+        try {
+            const response = await fetch('/api/upload', { method: 'POST', body: formData });
+            const result = await response.json();
+            if (response.ok) {
+                uploadStatus.innerHTML = '<p class="success">Video added to queue!</p>';
+                setTimeout(() => { window.location.href = '/queue'; }, 1500);
+            } else {
+                uploadStatus.innerHTML = '<p class="error">Error: ' + result.error + '</p>';
+            }
+        } catch (error) {
+            uploadStatus.innerHTML = '<p class="error">Upload failed: ' + error.message + '</p>';
+        }
+    });
+</script>
+{% endblock %}

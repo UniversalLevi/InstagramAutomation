@@ -1,0 +1,14 @@
+# Example account config. Copy to e.g. account_1.yaml and fill.
+# Login is manual: log in once on the device, then run automation.
+
+account_id: example
+display_name: "My TikTok"
+
+# Device: use adb devices to get serial for emulator or physical device
+device:
+  adb_serial: null   # e.g. emulator-5554 or device serial
+
+# App package for TikTok Android (regional variants exist)
+app:
+  package: com.zhiliaoapp.musically
+  activity: null

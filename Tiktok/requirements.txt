@@ -1,0 +1,8 @@
+# TikTok Automation
+# Python 3.9+
+
+Appium-Python-Client>=3.0.0
+PyYAML>=6.0
+Flask>=2.3.0
+Werkzeug>=2.3.0
+python-dateutil>=2.8.0
