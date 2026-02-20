@@ -20,6 +20,7 @@ from src.posting.screen_state import (
     PostingScreenState,
     get_posting_screen_state,
     get_action_for_state,
+    get_suggested_action_from_hints,
     find_element_by_intent,
     dump_screen_summary,
 )
@@ -246,7 +247,8 @@ class TikTokPoster:
                 time.sleep(STEP_SLEEP_SEC)
                 return True
             if state == PostingScreenState.CREATE_MENU:
-                self.driver.tap([(w // 2, int(h * 0.4))], 100)
+                # Upload/gallery icon is to the right of the record button (bottom-right area)
+                self.driver.tap([(int(w * 0.85), int(h * 0.88))], 120)
                 time.sleep(STEP_SLEEP_SEC)
                 return True
             if state == PostingScreenState.GALLERY:
@@ -257,9 +259,16 @@ class TikTokPoster:
             logger.debug("Fallback tap failed: %s", e)
         return False
 
-    def _perform_action(self, state: PostingScreenState, caption: str, hashtags: List[str]) -> bool:
-        action = get_action_for_state(state)
-        logger.info("State=%s action=%s", state.value, action)
+    def _perform_action(
+        self,
+        state: PostingScreenState,
+        caption: str,
+        hashtags: List[str],
+        suggested_intent: Optional[str] = None,
+    ) -> bool:
+        # Prefer screen-driven intent when available (see and judge)
+        action = suggested_intent if suggested_intent else get_action_for_state(state)
+        logger.info("State=%s action=%s%s", state.value, action, " (from hints)" if suggested_intent else "")
         if state == PostingScreenState.SUCCESS or action == "done":
             return True
         if action == "tap_create_post":
@@ -344,7 +353,11 @@ class TikTokPoster:
 
             for step in range(MAX_POST_STEPS):
                 state = get_posting_screen_state(self.driver)
-                logger.info("Step %d: state=%s", step + 1, state.value)
+                suggested_intent = get_suggested_action_from_hints(self.driver)
+                # Trust state on profile: never use gallery/next hint when we're on profile
+                if state == PostingScreenState.PROFILE and suggested_intent in ("tap_first_video", "tap_next_or_skip"):
+                    suggested_intent = None
+                logger.info("Step %d: state=%s%s", step + 1, state.value, f" hint={suggested_intent}" if suggested_intent else "")
                 if state == PostingScreenState.SHARE_READY:
                     had_share_ready_before = True
                 if state == PostingScreenState.SUCCESS:
@@ -354,6 +367,17 @@ class TikTokPoster:
                     logger.info("Post success (returned to Profile after Share)")
                     return True
                 if state == PostingScreenState.UNKNOWN:
+                    # Use hint-driven action when state is unknown
+                    if suggested_intent:
+                        acted = self._perform_action(state, caption, hashtags, suggested_intent=suggested_intent)
+                        if acted:
+                            time.sleep(STEP_SLEEP_SEC)
+                            new_state = get_posting_screen_state(self.driver)
+                            if new_state == PostingScreenState.SUCCESS:
+                                return True
+                            last_state = new_state
+                        time.sleep(STEP_SLEEP_SEC)
+                        continue
                     unknown_count += 1
                     if unknown_count >= UNKNOWN_STEPS_BEFORE_FAIL:
                         logger.error("Stuck in UNKNOWN for %d steps", UNKNOWN_STEPS_BEFORE_FAIL)
@@ -370,12 +394,45 @@ class TikTokPoster:
                 if state == last_state:
                     same_state_count += 1
                     if same_state_count >= 2:
-                        logger.warning("Stuck in %s, trying fallback tap", state.value)
+                        logger.warning("Stuck in %s, trying hint-driven then fallback", state.value)
                         try:
                             dump_screen_summary(self.driver, f"post_stuck_{state.value}.txt")
                         except Exception:
                             pass
-                        if self._fallback_tap_for_state(state):
+                        # Stuck on TRIM_EDIT (gallery picker): select video first then Next
+                        if state == PostingScreenState.TRIM_EDIT and (
+                            suggested_intent == "tap_next_or_skip"
+                            or get_action_for_state(state) == "tap_next_or_skip"
+                        ):
+                            self._perform_action(state, caption, hashtags, suggested_intent="tap_first_video")
+                            time.sleep(2.0)
+                            acted = self._perform_action(state, caption, hashtags, suggested_intent="tap_next_or_skip")
+                            if acted:
+                                time.sleep(2.5)
+                                new_state = get_posting_screen_state(self.driver)
+                                if new_state == PostingScreenState.SUCCESS:
+                                    return True
+                                last_state = new_state
+                                skip_action = True
+                        # Stuck on CREATE_MENU: tap upload icon by coordinates (right of record button)
+                        if not skip_action and state == PostingScreenState.CREATE_MENU:
+                            if self._fallback_tap_for_state(PostingScreenState.CREATE_MENU):
+                                time.sleep(2.5)
+                                new_state = get_posting_screen_state(self.driver)
+                                if new_state != PostingScreenState.CREATE_MENU:
+                                    last_state = new_state
+                                    skip_action = True
+                        # Prefer action from what's visible (Next, Upload, etc.)
+                        if not skip_action and suggested_intent:
+                            acted = self._perform_action(state, caption, hashtags, suggested_intent=suggested_intent)
+                            if acted:
+                                time.sleep(2.5)
+                                new_state = get_posting_screen_state(self.driver)
+                                if new_state == PostingScreenState.SUCCESS:
+                                    return True
+                                last_state = new_state
+                                skip_action = True
+                        if not skip_action and self._fallback_tap_for_state(state):
                             time.sleep(2.5)
                             new_state = get_posting_screen_state(self.driver)
                             if new_state == PostingScreenState.SUCCESS:
@@ -391,12 +448,22 @@ class TikTokPoster:
                     acted = False
                     time.sleep(STEP_SLEEP_SEC)
                 else:
-                    acted = self._perform_action(state, caption, hashtags)
-                action_name = get_action_for_state(state)
+                    acted = self._perform_action(state, caption, hashtags, suggested_intent=suggested_intent)
+                action_name = suggested_intent or get_action_for_state(state)
                 last_action_was_share = acted and action_name in ("fill_caption_then_share",)
 
                 if last_action_was_share:
                     time.sleep(8.0)
+                    # Success-wait: poll for SUCCESS or PROFILE and return immediately
+                    for _ in range(10):
+                        state_after = get_posting_screen_state(self.driver)
+                        if state_after == PostingScreenState.SUCCESS:
+                            logger.info("Post success detected after share")
+                            return True
+                        if state_after == PostingScreenState.PROFILE:
+                            logger.info("Post success (returned to Profile after Share)")
+                            return True
+                        time.sleep(2)
                 else:
                     time.sleep(STEP_SLEEP_SEC)
 

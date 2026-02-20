@@ -27,13 +27,16 @@ def create_post_button_on_profile_selectors() -> List[Tuple[str, str]]:
 
 
 def upload_selectors() -> List[Tuple[str, str]]:
-    """Upload option (to pick from gallery)."""
+    """Upload option (to pick from gallery) - icon to the right of record button."""
     return [
         (BY_XPATH, "//*[contains(@text, 'Upload') or contains(@text, 'upload')]"),
         (BY_XPATH, "//*[contains(@content-desc, 'Upload') or contains(@content-desc, 'upload')]"),
+        (BY_XPATH, "//*[contains(@content-desc, 'Gallery') or contains(@content-desc, 'gallery')]"),
+        (BY_XPATH, "//*[contains(@content-desc, 'album') or contains(@content-desc, 'library') or contains(@content-desc, 'photo')]"),
         (BY_XPATH, "//*[contains(@resource-id, 'upload')]"),
         (BY_XPATH, "//*[contains(@text, 'Gallery') or contains(@text, 'gallery')]"),
-        (BY_XPATH, "//*[contains(@content-desc, 'Gallery')]"),
+        # Create screen: clickable image/button in bottom area (upload icon often has no text)
+        (BY_XPATH, "//*[@clickable='true' and (contains(@resource-id, 'upload') or contains(@resource-id, 'gallery') or contains(@resource-id, 'album') or contains(@resource-id, 'choose') or contains(@resource-id, 'media'))]"),
     ]
 
 
@@ -49,6 +52,7 @@ def gallery_selectors() -> List[Tuple[str, str]]:
 def next_button_selectors() -> List[Tuple[str, str]]:
     """Next / Continue (trim and composer steps)."""
     return [
+        (BY_ID, "com.zhiliaoapp.musically:id/vn0"),
         (BY_XPATH, "//*[contains(@text, 'Next') or contains(@text, 'next')]"),
         (BY_XPATH, "//*[contains(@content-desc, 'Next')]"),
         (BY_XPATH, "//*[contains(@resource-id, 'next')]"),
