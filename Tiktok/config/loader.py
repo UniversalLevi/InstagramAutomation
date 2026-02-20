@@ -68,3 +68,27 @@ def list_account_configs() -> list[str]:
         if p.suffix in (".yaml", ".yml") and p.stem != "example":
             ids_.append(p.stem)
     return sorted(ids_)
+
+
+def save_account_config(account_id: str, updates: Dict[str, Any]) -> None:
+    """Merge updates into account config and save to accounts/<account_id>.yaml."""
+    if not yaml:
+        raise RuntimeError("PyYAML is required for config. Install with: pip install PyYAML")
+    ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
+    path = ACCOUNTS_DIR / f"{account_id}.yaml"
+    current = _load_yaml(path) if path.exists() else {}
+    if not current and account_id == "example":
+        current = {"account_id": "example", "display_name": "My TikTok", "device": {"adb_serial": None}, "app": {"package": "com.zhiliaoapp.musically", "activity": None}}
+
+    def merge(base: Dict, override: Dict) -> Dict:
+        out = dict(base)
+        for k, v in override.items():
+            if k in out and isinstance(out[k], dict) and isinstance(v, dict):
+                out[k] = merge(out[k], v)
+            else:
+                out[k] = v
+        return out
+
+    merged = merge(current, updates)
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(merged, f, default_flow_style=False, allow_unicode=True, sort_keys=False)

@@ -107,92 +107,98 @@ def run_plan(
         action = item.action
         params = item.params or {}
 
-        if action == ActionType.SCROLL_FYP:
-            num_videos = params.get("num_videos", 5)
-            logger.info("Executing SCROLL_FYP - %s videos", num_videos)
-            if app.go_to_home_tab():
-                n = app.scroll_fyp_for_videos(num_videos, step_sec=2.0)
-                total_actions += 1
-                if on_action_done:
-                    on_action_done("scroll_fyp", n)
-                logger.info("scroll_fyp done, videos=%s", n)
-            else:
-                logger.warning("Failed to go to Home for scroll_fyp")
-            delay()
-
-        elif action == ActionType.LIKE_VIDEO:
-            if likes_count >= plan.max_likes:
-                logger.info("Skipping LIKE_VIDEO - at max (%s)", plan.max_likes)
-                delay()
-                continue
-            if maybe_do_nothing(0.2):
-                logger.info("Skipping LIKE_VIDEO (random)")
-                delay()
-                continue
-            logger.info("Executing LIKE_VIDEO (%s/%s)", likes_count + 1, plan.max_likes)
-            if app.go_to_home_tab():
-                time.sleep(2.0)
-                if app.like_current_video():
-                    likes_count += 1
+        try:
+            if action == ActionType.SCROLL_FYP:
+                num_videos = params.get("num_videos", 5)
+                step_sec = warmup_cfg.get("step_sec_fyp", 1.2)
+                logger.info("Executing SCROLL_FYP - %s videos", num_videos)
+                if app.go_to_home_tab():
+                    n = app.scroll_fyp_for_videos(num_videos, step_sec=step_sec)
                     total_actions += 1
                     if on_action_done:
-                        on_action_done("like_video", 1)
-                    logger.info("like_video done")
+                        on_action_done("scroll_fyp", n)
+                    logger.info("scroll_fyp done, videos=%s", n)
                 else:
-                    logger.warning("Failed to like video")
-            else:
-                logger.warning("Failed to go to Home for like_video")
-            delay()
-
-        elif action == ActionType.VISIT_PROFILE:
-            if maybe_do_nothing(0.1):
-                logger.info("Skipping VISIT_PROFILE (random)")
+                    logger.warning("Failed to go to Home for scroll_fyp")
                 delay()
-                continue
-            logger.info("Executing VISIT_PROFILE")
-            if app.go_to_home_tab():
-                time.sleep(0.5)
-                if app.visit_profile_from_feed():
-                    total_actions += 1
-                    if on_action_done:
-                        on_action_done("visit_profile", 1)
-                    logger.info("visit_profile done")
+
+            elif action == ActionType.LIKE_VIDEO:
+                if likes_count >= plan.max_likes:
+                    logger.info("Skipping LIKE_VIDEO - at max (%s)", plan.max_likes)
+                    delay()
+                    continue
+                if maybe_do_nothing(0.2):
+                    logger.info("Skipping LIKE_VIDEO (random)")
+                    delay()
+                    continue
+                logger.info("Executing LIKE_VIDEO (%s/%s)", likes_count + 1, plan.max_likes)
+                if app.go_to_home_tab():
+                    time.sleep(warmup_cfg.get("step_sec_fyp", 1.2))
+                    if app.like_current_video():
+                        likes_count += 1
+                        total_actions += 1
+                        if on_action_done:
+                            on_action_done("like_video", 1)
+                        logger.info("like_video done")
+                    else:
+                        logger.warning("Failed to like video")
                 else:
-                    logger.warning("Failed to open profile from feed")
-            else:
-                app.tap_back()
-                time.sleep(1.0)
-                if app.go_to_home_tab() and app.visit_profile_from_feed():
+                    logger.warning("Failed to go to Home for like_video")
+                delay()
+
+            elif action == ActionType.VISIT_PROFILE:
+                if maybe_do_nothing(0.1):
+                    logger.info("Skipping VISIT_PROFILE (random)")
+                    delay()
+                    continue
+                logger.info("Executing VISIT_PROFILE")
+                if app.go_to_home_tab():
+                    time.sleep(0.5)
+                    if app.visit_profile_from_feed():
+                        total_actions += 1
+                        if on_action_done:
+                            on_action_done("visit_profile", 1)
+                        logger.info("visit_profile done")
+                    else:
+                        logger.warning("Failed to open profile from feed")
+                else:
+                    app.tap_back()
+                    time.sleep(1.0)
+                    if app.go_to_home_tab() and app.visit_profile_from_feed():
+                        total_actions += 1
+                        if on_action_done:
+                            on_action_done("visit_profile", 1)
+                delay()
+
+            elif action == ActionType.RETURN_HOME:
+                logger.info("Executing RETURN_HOME")
+                if app.tap_back():
                     total_actions += 1
                     if on_action_done:
-                        on_action_done("visit_profile", 1)
-            delay()
+                        on_action_done("return_home", 1)
+                delay()
 
-        elif action == ActionType.RETURN_HOME:
-            logger.info("Executing RETURN_HOME")
-            if app.tap_back():
-                total_actions += 1
-                if on_action_done:
-                    on_action_done("return_home", 1)
-            delay()
+            elif action == ActionType.GO_TO_OWN_PROFILE:
+                logger.info("Executing GO_TO_OWN_PROFILE")
+                if app.go_to_profile_tab():
+                    total_actions += 1
+                    if on_action_done:
+                        on_action_done("go_to_own_profile", 1)
+                    logger.info("go_to_own_profile done")
+                else:
+                    logger.warning("Failed to go to profile tab")
+                delay()
 
-        elif action == ActionType.GO_TO_OWN_PROFILE:
-            logger.info("Executing GO_TO_OWN_PROFILE")
-            if app.go_to_profile_tab():
-                total_actions += 1
+            elif action == ActionType.IDLE:
+                time.sleep(params.get("duration_sec", DEFAULT_IDLE_SEC))
                 if on_action_done:
-                    on_action_done("go_to_own_profile", 1)
-                logger.info("go_to_own_profile done")
+                    on_action_done("idle", 1)
+
             else:
-                logger.warning("Failed to go to profile tab")
-            delay()
+                delay()
 
-        elif action == ActionType.IDLE:
-            time.sleep(params.get("duration_sec", DEFAULT_IDLE_SEC))
-            if on_action_done:
-                on_action_done("idle", 1)
-
-        else:
+        except Exception as e:
+            logger.warning("Action %s failed: %s", action.value, e, exc_info=True)
             delay()
 
     session_ended_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")

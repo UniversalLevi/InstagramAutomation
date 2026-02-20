@@ -134,14 +134,9 @@ class TikTokApp:
         if _find_element(self.driver, sel.like_button_liked_selectors(), timeout=0.5):
             return False
         el = _find_element(self.driver, sel.like_button_selectors(), timeout=3.0)
-        if el:
-            try:
-                _tap_element(self.driver, el)
-                time.sleep(0.8)
-                return True
-            except Exception as e:
-                logger.warning("Failed to tap like: %s", e)
-                return False
+        if el and _tap_element_robust(self.driver, el):
+            time.sleep(0.8)
+            return True
         # Fallback: double-tap on video area
         try:
             size = self.driver.get_window_size()
@@ -157,12 +152,14 @@ class TikTokApp:
             return False
 
     def visit_profile_from_feed(self) -> bool:
-        """Tap username/avatar on current video to open creator profile."""
-        el = _find_element(self.driver, sel.profile_username_in_feed_selectors(), timeout=3.0)
-        if el:
-            _tap_element(self.driver, el)
-            time.sleep(1.5)
-            return True
+        """Tap username/avatar on current video to open creator profile. Retries once on stale element."""
+        for attempt in range(2):
+            el = _find_element(self.driver, sel.profile_username_in_feed_selectors(), timeout=3.0)
+            if el and _tap_element_robust(self.driver, el):
+                time.sleep(1.5)
+                return True
+            if attempt == 0:
+                time.sleep(0.5)
         return False
 
     def tap_back(self) -> bool:

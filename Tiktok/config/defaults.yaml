@@ -8,14 +8,15 @@ limits:
   one_session_per_day: true
 
 warmup:
-  delay_between_actions_min: 2
-  delay_between_actions_max: 8
-  scroll_duration_min_sec: 30
-  scroll_duration_max_sec: 60
+  delay_between_actions_min: 1
+  delay_between_actions_max: 4
+  scroll_duration_min_sec: 15
+  scroll_duration_max_sec: 40
   fyp_scroll_count: 3
   like_count: 4
   visit_profile_count: 2
   exit_early_probability: 0.05
+  step_sec_fyp: 1.2
 
 health:
   cooldown_days_min: 3

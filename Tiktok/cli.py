@@ -23,7 +23,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from config.loader import get_full_config, list_account_configs
+from config.loader import get_full_config, list_account_configs, save_account_config
 from state import repository as repo
 from state.db import DEFAULT_DB_PATH, ensure_schema
 
@@ -253,14 +253,143 @@ def _menu_web():
 
 
 def _menu_config():
-    print("\nConfig & Settings")
-    print("-" * 60)
     account_id = _get_current_account()
-    config = get_full_config(account_id)
-    print(f"Account: {account_id}")
-    print("Limits:", config.get("limits", {}))
-    print("Warmup:", config.get("warmup", {}))
-    print("Device:", config.get("device", {}))
+    while True:
+        print("\nConfig & Settings")
+        print("-" * 60)
+        config = get_full_config(account_id)
+        limits = config.get("limits", {})
+        warmup = config.get("warmup", {})
+        device = config.get("device", {})
+        print(f"Account: {account_id}\n")
+        print("  1. View current config")
+        print("  2. Edit delay between actions (min/max sec)")
+        print("  3. Edit scroll duration (min/max sec)")
+        print("  4. Edit daily limits (max actions, max likes, session min)")
+        print("  5. Edit warmup counts (FYP scroll, likes, visit profiles)")
+        print("  6. Edit FYP step speed (sec per video)")
+        print("  7. Edit device (adb_serial)")
+        print("  0. Back to main menu")
+        print("-" * 60)
+        choice = input("Your choice: ").strip()
+        if choice == "0":
+            break
+        elif choice == "1":
+            print("\nLimits:", limits)
+            print("Warmup:", warmup)
+            print("Device:", device)
+        elif choice == "2":
+            dmin = warmup.get("delay_between_actions_min", 1)
+            dmax = warmup.get("delay_between_actions_max", 4)
+            inp = input(f"Min delay in sec [{dmin}]: ").strip()
+            if inp != "":
+                try:
+                    dmin = int(inp)
+                except ValueError:
+                    print("Invalid number, skipped.")
+            inp = input(f"Max delay in sec [{dmax}]: ").strip()
+            if inp != "":
+                try:
+                    dmax = int(inp)
+                except ValueError:
+                    print("Invalid number, skipped.")
+            save_account_config(account_id, {"warmup": {"delay_between_actions_min": dmin, "delay_between_actions_max": dmax}})
+            print("Saved.")
+        elif choice == "3":
+            smin = warmup.get("scroll_duration_min_sec", 15)
+            smax = warmup.get("scroll_duration_max_sec", 40)
+            inp = input(f"Scroll min sec [{smin}]: ").strip()
+            if inp != "":
+                try:
+                    smin = int(inp)
+                except ValueError:
+                    print("Invalid number, skipped.")
+            inp = input(f"Scroll max sec [{smax}]: ").strip()
+            if inp != "":
+                try:
+                    smax = int(inp)
+                except ValueError:
+                    print("Invalid number, skipped.")
+            save_account_config(account_id, {"warmup": {"scroll_duration_min_sec": smin, "scroll_duration_max_sec": smax}})
+            print("Saved.")
+        elif choice == "4":
+            max_act = limits.get("max_actions_per_day", 10)
+            max_like = limits.get("max_likes_per_day_first_two_weeks", 5)
+            max_min = limits.get("max_session_minutes", 15)
+            inp = input(f"Max actions per day [{max_act}]: ").strip()
+            if inp != "":
+                try:
+                    max_act = int(inp)
+                except ValueError:
+                    print("Invalid number, skipped.")
+            inp = input(f"Max likes per day (first 2 weeks) [{max_like}]: ").strip()
+            if inp != "":
+                try:
+                    max_like = int(inp)
+                except ValueError:
+                    print("Invalid number, skipped.")
+            inp = input(f"Max session minutes [{max_min}]: ").strip()
+            if inp != "":
+                try:
+                    max_min = int(inp)
+                except ValueError:
+                    print("Invalid number, skipped.")
+            save_account_config(account_id, {"limits": {"max_actions_per_day": max_act, "max_likes_per_day_first_two_weeks": max_like, "max_session_minutes": max_min}})
+            print("Saved.")
+        elif choice == "5":
+            fyp = warmup.get("fyp_scroll_count", 3)
+            like = warmup.get("like_count", 4)
+            visit = warmup.get("visit_profile_count", 2)
+            inp = input(f"FYP scroll count (videos per scroll) [{fyp}]: ").strip()
+            if inp != "":
+                try:
+                    fyp = int(inp)
+                except ValueError:
+                    print("Invalid number, skipped.")
+            inp = input(f"Like count [{like}]: ").strip()
+            if inp != "":
+                try:
+                    like = int(inp)
+                except ValueError:
+                    print("Invalid number, skipped.")
+            inp = input(f"Visit profile count [{visit}]: ").strip()
+            if inp != "":
+                try:
+                    visit = int(inp)
+                except ValueError:
+                    print("Invalid number, skipped.")
+            save_account_config(account_id, {"warmup": {"fyp_scroll_count": fyp, "like_count": like, "visit_profile_count": visit}})
+            print("Saved.")
+        elif choice == "6":
+            step = warmup.get("step_sec_fyp", 1.2)
+            inp = input(f"Seconds per video on FYP (lower = faster) [{step}]: ").strip()
+            if inp != "":
+                try:
+                    step = float(inp)
+                except ValueError:
+                    print("Invalid number, skipped.")
+                else:
+                    save_account_config(account_id, {"warmup": {"step_sec_fyp": step}})
+                    print("Saved.")
+        elif choice == "7":
+            serial = device.get("adb_serial")
+            disp = serial if serial else "none"
+            inp = input(f"ADB serial (e.g. emulator-5554) [{disp}]: ").strip()
+            if inp == "" and serial is None:
+                pass
+            else:
+                val = inp if inp != "" else serial
+                if val and val.lower() in ("none", "null", "-"):
+                    val = None
+                save_account_config(account_id, {"device": {"adb_serial": val}})
+                print("Saved.")
+        else:
+            print("Invalid option.")
+        if choice != "0":
+            try:
+                input("\nPress Enter to continue...")
+            except (EOFError, KeyboardInterrupt):
+                break
     return 0
 
 

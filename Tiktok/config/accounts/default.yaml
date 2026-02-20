@@ -1,0 +1,3 @@
+warmup:
+  delay_between_actions_min: 1
+  delay_between_actions_max: 4
