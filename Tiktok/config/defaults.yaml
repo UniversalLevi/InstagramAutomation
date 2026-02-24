@@ -1,6 +1,11 @@
 # Default limits and behavior for TikTok (manual login only)
 # Override per-account in config/accounts/
 
+# Posting: "appium" (device automation) or "api" (TikTok Content Posting API)
+# When "api", set tiktok_api in account config (client_key, client_secret, access_token, etc.)
+posting:
+  method: api      # use TikTok API for posting (no device needed)
+
 limits:
   max_actions_per_day: 10
   max_likes_per_day_first_two_weeks: 5

@@ -72,7 +72,7 @@ class PostScheduler:
             logger.error("Error checking scheduled posts: %s", e)
 
     def _trigger_posting(self, post_id: int):
-        """Create driver, run TikTokPoster.post_item, then mark_posted."""
+        """Run posting: API or Appium depending on config."""
         if not _posting_lock.acquire(blocking=False):
             logger.warning("Posting already in progress, skipping post %s", post_id)
             return
@@ -86,8 +86,6 @@ class PostScheduler:
                 return
 
             from config.loader import get_full_config
-            from src.device.driver import create_driver
-            from src.posting.poster import TikTokPoster
             from src.health.monitor import is_in_cooldown
 
             if is_in_cooldown(account_id):
@@ -96,6 +94,22 @@ class PostScheduler:
 
             self.queue_manager.update_status(post_id, PostStatus.POSTING)
             config = get_full_config(account_id)
+            posting_config = config.get("posting", {}) or {}
+            method = posting_config.get("method", "appium")
+
+            if method == "api":
+                from src.posting.api_poster import TikTokApiPoster
+                try:
+                    poster = TikTokApiPoster(account_id)
+                    success = poster.post_item(post)
+                    self.queue_manager.mark_posted(post_id, success=success)
+                except Exception as e:
+                    logger.error("Post %s failed (API): %s", post_id, e, exc_info=True)
+                    self.queue_manager.mark_posted(post_id, success=False, error_message=str(e)[:500])
+                return
+
+            from src.device.driver import create_driver
+            from src.posting.poster import TikTokPoster
             app_config = config.get("app", {})
             device_config = config.get("device", {})
             package = app_config.get("package", "com.zhiliaoapp.musically")

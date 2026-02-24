@@ -32,6 +32,8 @@
     <div class="actions-section">
         <a href="{{ url_for('upload_page') }}" class="btn btn-primary">Upload Video</a>
         <a href="{{ url_for('queue_page') }}" class="btn btn-secondary">View Queue</a>
+        <a href="{{ url_for('oauth_authorize') }}" class="btn btn-oauth">Get TikTok API token</a>
+        <span class="oauth-hint">(Add <code>http://127.0.0.1:5001/oauth/callback</code> in Developer Portal → Login Kit → Redirect URI)</span>
     </div>
 
     <div class="recent-posts">

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}TikTok OAuth – Copy your code{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>TikTok OAuth – Authorization code</h2>
+    <p>Copy the code below and use it in the curl command to get your access token.</p>
+
+    <div class="oauth-code-box">
+        <label for="oauth-code">Authorization code:</label>
+        <input type="text" id="oauth-code" value="{{ code }}" readonly class="oauth-code-input" />
+        <button type="button" class="btn btn-primary" onclick="navigator.clipboard.writeText(document.getElementById('oauth-code').value); this.textContent='Copied!'; setTimeout(() => this.textContent='Copy code', 2000);">Copy code</button>
+    </div>
+
+    <h3>Exchange code for token (PowerShell)</h3>
+    <p>Replace <code>YOUR_CLIENT_SECRET</code> with your Client Secret from the Developer Portal, then run:</p>
+    <pre class="oauth-curl">curl.exe -X POST "https://open.tiktokapis.com/v2/oauth/token/" `
+  -H "Content-Type: application/x-www-form-urlencoded" `
+  -d "client_key={{ client_key }}" `
+  -d "client_secret=YOUR_CLIENT_SECRET" `
+  -d "code={{ code }}" `
+  -d "grant_type=authorization_code" `
+  -d "redirect_uri={{ redirect_uri }}"</pre>
+    <button type="button" id="copy-curl-btn" class="btn btn-secondary" onclick="copyCurl();">Copy curl command</button>
+
+    <p class="oauth-back"><a href="{{ url_for('index') }}">Back to Dashboard</a></p>
+</div>
+<script>
+function copyCurl() {
+    const pre = document.querySelector('.oauth-curl');
+    navigator.clipboard.writeText(pre.textContent);
+    const btn = document.getElementById('copy-curl-btn');
+    if (btn) { btn.textContent = 'Copied!'; setTimeout(function() { btn.textContent = 'Copy curl command'; }, 2000); }
+}
+</script>
+{% endblock %}

@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template, request, send_from_directory
+from flask import Flask, jsonify, redirect, render_template, request, send_from_directory, url_for
 from typing import Optional
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -30,9 +30,46 @@ except Exception as _e:
     logging.warning("Could not import cli._get_current_account (%s); using default account.", _e)
 
 _scheduler: Optional[PostScheduler] = None
+_cleanup_interval_sec = 120  # delete stuck/failed debug files every 2 minutes
+_cleanup_thread_started = False
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Glob patterns for debug files created when posting gets stuck or fails (relative to PROJECT_ROOT)
+_DEBUG_FILE_PATTERNS = [
+    "post_stuck_*.txt",
+    "post_stuck_*.png",
+    "post_failed_*.png",
+    "post_debug_screen.txt",
+    "post_debug_screen.png",
+]
+
+
+def _cleanup_stuck_debug_files() -> None:
+    """Delete captured stuck/failed screenshots and screen dumps from PROJECT_ROOT."""
+    try:
+        deleted = 0
+        for pattern in _DEBUG_FILE_PATTERNS:
+            for path in PROJECT_ROOT.glob(pattern):
+                try:
+                    path.unlink()
+                    deleted += 1
+                    logger.debug("Cleaned up debug file: %s", path.name)
+                except OSError as e:
+                    logger.debug("Could not delete %s: %s", path, e)
+        if deleted:
+            logger.info("Cleanup: removed %d stuck/failed debug file(s)", deleted)
+    except Exception as e:
+        logger.warning("Cleanup of debug files failed: %s", e)
+
+
+def _cleanup_loop() -> None:
+    """Background loop: run cleanup every 2 minutes."""
+    import time
+    while True:
+        time.sleep(_cleanup_interval_sec)
+        _cleanup_stuck_debug_files()
 
 _WEB_DIR = Path(__file__).resolve().parent
 app = Flask(__name__, template_folder=str(_WEB_DIR / "templates"), static_folder=str(_WEB_DIR / "static"))
@@ -73,9 +110,140 @@ def save_uploaded_file(file, media_type: MediaType) -> Path:
     return target_path
 
 
+# TikTok OAuth: use localhost so you don't need ngrok. Add this exact URI in Developer Portal:
+# http://127.0.0.1:5001/oauth/callback
+_TIKTOK_OAUTH = {
+    "client_key": "sbaw4oy89sm5o0iids",
+    "redirect_uri": "http://127.0.0.1:5001/oauth/callback",
+    "scope": "video.publish,video.upload",
+}
+_TIKTOK_AUTH_URL = (
+    "https://www.tiktok.com/auth/authorize/"
+    f"?client_key={_TIKTOK_OAUTH['client_key']}"
+    f"&scope={_TIKTOK_OAUTH['scope']}"
+    f"&response_type=code"
+    f"&redirect_uri={_TIKTOK_OAUTH['redirect_uri']}"
+    "&state=random123"
+)
+_TIKTOK_TOKEN_URL = "https://open.tiktokapis.com/v2/oauth/token/"
+
+
+@app.route("/oauth/authorize")
+def oauth_authorize():
+    """Redirect to TikTok auth with the correct URL (no copy-paste errors)."""
+    return redirect(_TIKTOK_AUTH_URL)
+
+
+@app.route("/oauth/callback")
+def oauth_callback():
+    """TikTok redirects here with ?code=...; we exchange it for a token and save to config."""
+    import requests
+    from config.loader import get_account_config, save_account_config
+
+    account_id = _get_current_account()
+    code = request.args.get("code")
+    error_param = request.args.get("error")
+
+    if error_param:
+        return render_template(
+            "oauth_result.html",
+            account_id=account_id,
+            success=False,
+            message=f"TikTok returned an error: {error_param}. Make sure you're logged in with a Sandbox Target User account.",
+        )
+    if not code:
+        return render_template(
+            "oauth_result.html",
+            account_id=account_id,
+            success=False,
+            message="No authorization code received. Try again from the Dashboard.",
+        )
+
+    # Load account config to get client_secret
+    acc = get_account_config(account_id)
+    tiktok_api = acc.get("tiktok_api") or {}
+    client_secret = tiktok_api.get("client_secret") or acc.get("client_secret")
+    if not client_secret:
+        return render_template(
+            "oauth_result.html",
+            account_id=account_id,
+            success=False,
+            message="Add client_secret to config. In config/accounts/default.yaml add: tiktok_api: client_key: sbaw4oy89sm5o0iids  client_secret: YOUR_CLIENT_SECRET",
+        )
+
+    # Exchange code for token
+    try:
+        resp = requests.post(
+            _TIKTOK_TOKEN_URL,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            data={
+                "client_key": _TIKTOK_OAUTH["client_key"],
+                "client_secret": client_secret,
+                "code": code,
+                "grant_type": "authorization_code",
+                "redirect_uri": _TIKTOK_OAUTH["redirect_uri"],
+            },
+            timeout=15,
+        )
+        data = resp.json()
+    except Exception as e:
+        logger.exception("Token exchange request failed")
+        return render_template(
+            "oauth_result.html",
+            account_id=account_id,
+            success=False,
+            message=f"Request failed: {e}",
+        )
+
+    if "access_token" not in data:
+        err = data.get("error", data.get("message", str(data)))
+        return render_template(
+            "oauth_result.html",
+            account_id=account_id,
+            success=False,
+            message=f"TikTok token error: {err}. Check that redirect_uri in Developer Portal is exactly: {_TIKTOK_OAUTH['redirect_uri']}",
+        )
+
+    # Save tokens to account config (merge with existing tiktok_api)
+    updates = {
+        "tiktok_api": {
+            **tiktok_api,
+            "client_key": _TIKTOK_OAUTH["client_key"],
+            "client_secret": client_secret,
+            "access_token": data["access_token"],
+            "refresh_token": data.get("refresh_token") or tiktok_api.get("refresh_token"),
+            "open_id": data.get("open_id") or tiktok_api.get("open_id"),
+            "post_mode": tiktok_api.get("post_mode", "direct"),
+            "privacy_level": tiktok_api.get("privacy_level", "SELF_ONLY"),
+        }
+    }
+    try:
+        save_account_config(account_id, updates)
+        logger.info("TikTok access token saved for account %s", account_id)
+    except Exception as e:
+        logger.exception("Failed to save config")
+        return render_template(
+            "oauth_result.html",
+            account_id=account_id,
+            success=False,
+            message=f"Token received but saving config failed: {e}",
+        )
+
+    return render_template(
+        "oauth_result.html",
+        account_id=account_id,
+        success=True,
+        message="Access token saved. You can use API posting now.",
+    )
+
+
 @app.route("/")
 def index():
     account_id = _get_current_account()
+    # If TikTok redirected here with ?code=... (old ngrok-style), send to callback
+    code = request.args.get("code")
+    if code and request.path == "/":
+        return redirect(url_for("oauth_callback", code=code, **request.args))
     return render_template("index.html", account_id=account_id)
 
 
@@ -229,6 +397,27 @@ def api_post_now(post_id: int):
             queue_manager.update_status(post_id, PostStatus.PENDING)
             return jsonify({"error": "Another post is in progress. Try again shortly."}), 429
 
+        config = get_full_config(account_id)
+        posting_config = config.get("posting", {}) or {}
+        method = posting_config.get("method", "appium")
+
+        if method == "api":
+            try:
+                from src.posting.api_poster import TikTokApiPoster
+                poster = TikTokApiPoster(account_id)
+                success = poster.post_item(post)
+                _posting_lock.release()
+                if success:
+                    queue_manager.mark_posted(post_id, success=True)
+                    return jsonify({"success": True, "message": "Post published successfully"}), 200
+                queue_manager.mark_posted(post_id, success=False, error_message="TikTok API posting failed")
+                return jsonify({"error": "Posting failed - check logs"}), 500
+            except Exception as e:
+                _posting_lock.release()
+                err_msg = str(e)[:400]
+                queue_manager.update_status(post_id, PostStatus.FAILED, error_message=err_msg)
+                return jsonify({"error": err_msg}), 500
+
         POST_TIMEOUT_SEC = 300
         result = {"success": None, "error": None}
         driver_holder = {}  # shared ref so we can quit driver on timeout
@@ -236,7 +425,8 @@ def api_post_now(post_id: int):
         def run_post():
             dr = None
             try:
-                config = get_full_config(account_id)
+                from src.device.driver import create_driver
+                from src.posting.poster import TikTokPoster
                 app_config = config.get("app", {})
                 device_config = config.get("device", {})
                 package = app_config.get("package", "com.zhiliaoapp.musically")
@@ -266,7 +456,6 @@ def api_post_now(post_id: int):
                     post_id, PostStatus.FAILED,
                     error_message=f"Posting timed out after {POST_TIMEOUT_SEC}s.",
                 )
-                # Quit driver so the background thread stops quickly
                 dr = driver_holder.pop("driver", None)
                 if dr is not None:
                     try:
@@ -330,7 +519,19 @@ def init_scheduler():
     logger.info("Scheduler initialized and started")
 
 
+def init_cleanup_thread():
+    """Start background thread that deletes stuck/failed debug files every 2 minutes."""
+    global _cleanup_thread_started
+    if _cleanup_thread_started:
+        return
+    _cleanup_thread_started = True
+    t = threading.Thread(target=_cleanup_loop, daemon=True)
+    t.start()
+    logger.info("Debug file cleanup started (every %s seconds)", _cleanup_interval_sec)
+
+
 init_scheduler()
+init_cleanup_thread()
 
 
 @app.route("/media/<path:filename>")
@@ -340,6 +541,7 @@ def serve_media(filename: str):
 
 def create_app():
     init_scheduler()
+    init_cleanup_thread()
     return app
 
 

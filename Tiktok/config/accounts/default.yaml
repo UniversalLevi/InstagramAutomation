@@ -1,3 +1,10 @@
+# TikTok API (for posting.method: api). access_token is filled by the OAuth flow.
+tiktok_api:
+  client_key: sbaw4oy89sm5o0iids
+  client_secret: pgG6LkfYbVxGD5GrUnxZgorGsQxSyi5E
+  post_mode: direct
+  privacy_level: SELF_ONLY
+
 warmup:
   delay_between_actions_min: 1
   delay_between_actions_max: 4

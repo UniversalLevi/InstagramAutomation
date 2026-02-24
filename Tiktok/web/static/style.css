@@ -147,6 +147,80 @@ h2 {
     font-size: 0.9rem;
 }
 
+.btn-oauth {
+    background-color: #25f4ee;
+    color: #000;
+}
+
+.btn-oauth:hover {
+    background-color: #20e0da;
+}
+
+.oauth-code-box {
+    margin: 1.5rem 0;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 6px;
+}
+
+.oauth-code-box label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+}
+
+.oauth-code-input {
+    width: 100%;
+    max-width: 480px;
+    padding: 0.5rem;
+    font-family: monospace;
+    margin-right: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.oauth-curl {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 1rem;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 0.85rem;
+    white-space: pre;
+    margin: 1rem 0;
+}
+
+.oauth-back {
+    margin-top: 2rem;
+}
+
+.oauth-result-message {
+    margin: 1.5rem 0;
+    padding: 1rem;
+    border-radius: 6px;
+}
+
+.oauth-result-message.oauth-success {
+    background: #d4edda;
+    color: #155724;
+}
+
+.oauth-result-message.oauth-error {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.oauth-hint {
+    font-size: 0.85rem;
+    color: #666;
+    margin-left: 0.5rem;
+}
+
+.oauth-hint code {
+    background: #eee;
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+}
+
 .upload-form {
     max-width: 800px;
 }

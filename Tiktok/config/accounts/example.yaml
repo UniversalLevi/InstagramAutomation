@@ -1,5 +1,6 @@
 # Example account config. Copy to e.g. account_1.yaml and fill.
-# Login is manual: log in once on the device, then run automation.
+# Login is manual for Appium: log in once on the device, then run automation.
+# For API posting: complete tiktok_api and set posting.method to "api" in defaults or here.
 
 account_id: example
 display_name: "My TikTok"
@@ -12,3 +13,16 @@ device:
 app:
   package: com.zhiliaoapp.musically
   activity: null
+
+# TikTok Content Posting API (optional). Use when posting.method is "api".
+# Get credentials from https://developers.tiktok.com/ - create app, enable Content Posting API.
+# Obtain access_token via OAuth (video.upload for inbox, video.publish for direct post).
+# access_token expires in 24h; refresh_token can be used to get new access_token for up to 365 days.
+# tiktok_api:
+#   client_key: "your_client_key"
+#   client_secret: "your_client_secret"
+#   access_token: "user_access_token"
+#   refresh_token: "user_refresh_token"   # optional, for refresh
+#   open_id: "user_open_id"               # optional, for some APIs
+#   post_mode: "direct"                   # "direct" or "inbox"
+#   privacy_level: "SELF_ONLY"           # SELF_ONLY, FOLLOWER_OF_CREATOR, MUTUAL_FOLLOW_FRIENDS, PUBLIC_TO_EVERYONE (audited apps only)

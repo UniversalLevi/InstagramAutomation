@@ -1,0 +1,21 @@
+# TikTok API account – used when posting.method is "api"
+# Run: python get_tiktok_token.py   to fill access_token (one-time OAuth).
+
+account_id: my_account
+display_name: "My TikTok"
+
+device:
+  adb_serial: null
+
+app:
+  package: com.zhiliaoapp.musically
+  activity: null
+
+tiktok_api:
+  client_key: "aww7140jmdqhdorm"
+  client_secret: "BO7LpHHTuSRkiJENI9NSigYIsHEkOOTnQ"
+  access_token: ""   # filled by get_tiktok_token.py after you complete OAuth
+  refresh_token: ""
+  open_id: ""
+  post_mode: direct
+  privacy_level: SELF_ONLY
